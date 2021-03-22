@@ -1,0 +1,98 @@
+﻿@inject IContactSort Sort
+
+@if (CurrentContact != null)
+{
+<div class="row contact-detail">
+     <div class="col-2">@CurrentContact.LastName</div>
+        <div class="col-2">@CurrentContact.FirstName</div>
+        @if (CurrentContact.BirthDate != null)
+        {
+            <div class="col-2">
+                @(((DateTime)CurrentContact.BirthDate).ToString("MM/dd/yyyy"))
+            </div>
+        }
+        else
+        {
+            <div class="col-2">
+               
+            </div>
+        }
+
+        <div class="col-3">@CurrentContact.PhoneNumber</div>
+    
+    <div class="col-2">
+        <a alt="View Details" title="View Details" href="edit/@CurrentContact.Id.ToString()">
+            Edit <span class="oi oi-pencil" aria-hidden="true"></span>
+            /View <span class="oi oi-eye" aria-hidden="true"></span>
+        </a>
+    </div>
+</div>
+}
+@code 
+{
+    private Contact currentContact;
+
+    // The Contact being rendered, will be set by the caller (Index.razor)
+    [Parameter]
+    public Contact CurrentContact
+    {
+        get => currentContact;
+        set
+        {
+            if (value != null && !value.Equals(currentContact))
+            {
+                currentContact = value;
+                DeleteConfirmation = false;
+            }
+        }
+    }
+
+    // Event to raise when a contact delete is requested.
+    [Parameter]
+    public EventCallback DeleteContact { get; set; }
+
+    // Overall wrapper of functionality.
+    [CascadingParameter]
+    public GridWrapper Wrapper { get; set; }
+
+    // Returns true if conditions for delete are met.
+    private bool CanDelete => !DeleteConfirmation &&
+        (Wrapper.DeleteRequestId == Guid.Empty || Wrapper.DeleteRequestId == CurrentContact?.Id);
+
+    // Navigate to view.
+    private string ViewLink => $"View/{CurrentContact?.Id}";
+
+    // Confirm the delete.
+    private bool DeleteConfirmation { get; set; }
+
+    // Called based on confirmation.
+    // parameter confirmed is True when confirmed
+    private async Task ConfirmAsync(bool confirmed)
+    {
+        if (confirmed)
+        {
+            await DeleteAsync();
+        }
+        else
+        {
+            DeleteConfirmation = false;
+            await Wrapper.DeleteRequested.InvokeAsync(Guid.Empty);
+        }
+    }
+
+    // Set delete to true and pass current contact Id to delete function
+    private async Task DeleteRequestAsync()
+    {
+        if (Wrapper.DeleteRequestId == Guid.Empty)
+        {
+            DeleteConfirmation = true;
+            await Wrapper.DeleteRequested.InvokeAsync(CurrentContact.Id);
+        }
+    }
+
+    // Deletes the Contact
+    private Task DeleteAsync()
+    {
+        return DeleteContact.InvokeAsync(this);
+    }
+}

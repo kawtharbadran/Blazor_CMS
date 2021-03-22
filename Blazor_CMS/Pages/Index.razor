@@ -1,0 +1,227 @@
+﻿@page "/"
+@page "/{Page:int}"
+
+@inject IContactSort GridSort
+@inject IDbContextFactory<ContactContext> DbFactory
+@inject NavigationManager Nav
+@inject GridQueryAdapter QueryAdapter
+
+<h1>Contacts</h1>
+
+<GridWrapper @ref="Wrapper"
+             DeleteRequested="id => Wrapper.DeleteRequestId = Guid.Empty">
+
+    <div class="container-fluid contacts-grid">
+
+        <div class="row">&nbsp;</div>
+
+        <div class="row">
+            <div class="col-11">
+
+                <!--Previous page button will only be enabled when the grid is done loading and the has a previous page-->
+                <!--Page helper will do the math for us-->
+                <a disabled="@(GridSort.Loading || !GridSort.PageHelper.HasPrevPage)"
+                   class="btn btn-primary @IsDisabled(GridSort.PageHelper.HasPrevPage)"
+                   href="@GridSort.PageHelper.PrevPage">
+                    Previous
+                </a>
+
+                <!--Next page button will only be enabled when the grid is done loading and the has a previous page-->
+                <!--Page helper will do the math for us-->
+                <a disabled="@(GridSort.Loading || !GridSort.PageHelper.HasNextPage)"
+                   class="btn btn-primary @IsDisabled(GridSort.PageHelper.HasNextPage)"
+                   href="@GridSort.PageHelper.NextPage">
+                    Next
+                </a>
+
+                <!--Add Contact button link-->
+                <a class="btn btn-secondary float-right" href="add">
+                    <span class="oi oi-plus" aria-hidden="true"></span> Add New Contact
+                </a>
+            </div>
+        </div>
+        <div class="row">&nbsp;</div>
+        <div class="row contact-header">
+
+            <!-- Use Sort Indicator razor componenet to determine which icon to show for sorting names-->
+            <div class="col-2"
+                 @onclick="@(async ()=>await ToggleAsync(ContactSortColumns.LastName))">
+                <SortIndicator Column="@(ContactSortColumns.LastName)" />&nbsp;Last Name
+            </div>
+            
+            <div class="col-2"
+                 @onclick="@(async ()=>await ToggleAsync(ContactSortColumns.FirstName))">
+                <SortIndicator Column="@(ContactSortColumns.FirstName)" />&nbsp;First Name
+            </div>
+            
+            <div class="col-2">
+                &nbsp;Birth Date
+            </div>
+            
+            <div class="col-3">
+                &nbsp;Phone Number
+            </div>
+
+            <!--For edit/view link-->
+            <div class="col-2">&nbsp;</div>
+        </div>
+
+        <!-- Only load contacts when the grid is done loading and there are contacts to show-->
+        @if (GridSort.Loading || Contacts == null)
+        {
+            <div class="row">
+                <div class="col-12 alert alert-info">
+                    Loading...
+                </div>
+            </div>
+         }
+        @if (Contacts != null && Contacts.Count == 0)
+        {
+            <div class="row">
+                <div class="col-12 alert alert-warning">
+                    No contacts found.
+                </div>
+            </div>
+        }
+        @if (Contacts != null)
+        {
+            @foreach (var contact in Contacts)
+            {
+                <ContactRow @key=contact CurrentContact="@contact" DeleteContact="DeleteContactAsync" />
+             }
+        }
+    </div>
+</GridWrapper>
+
+@code
+{ 
+    // The current page
+    [Parameter]
+    public int Page
+    {
+        get => GridSort.PageHelper.Page;
+        set
+        {
+            GridSort.PageHelper.Page = value;
+        }
+    }
+
+    // A wrapper for grid-related activity (like delete)
+    private GridWrapper Wrapper { get; set; }
+
+    // Current page of Contact
+    private ICollection<Contact> Contacts { get; set; }
+
+    // Helper method to set disabled on class for paging.
+    // parameter condition is true when the element is active (and therefore should not be disabled).</param>
+    // returns the string literal "disabled" or an empty string
+    private string IsDisabled(bool condition) =>
+    !GridSort.Loading && condition ? "" : "disabled";
+
+    // Keeps track of the last page loaded.
+    private int _lastPage = -1;
+
+    // Main logic when getting started.
+    // parameter firstRender is true for first-time render
+    protected override void OnAfterRender(bool firstRender)
+    {
+        // Ensure we're on the same right page.
+        if (_lastPage < 1)
+        {
+            Nav.NavigateTo("/1");
+            return;
+        }
+
+        // Normalize the page values.
+        if (GridSort.PageHelper.PageCount > 0)
+        {
+            if (Page < 1)
+            {
+                Nav.NavigateTo("/1");
+                return;
+            }
+            if (Page > GridSort.PageHelper.PageCount)
+            {
+                Nav.NavigateTo($"/{GridSort.PageHelper.PageCount}");
+                return;
+            }
+        }
+        base.OnAfterRender(firstRender);
+    }
+
+    // Triggered for any paging update.
+    protected async override Task OnParametersSetAsync()
+    {
+        // Make sure the page really chagned.
+        if (Page != _lastPage)
+        {
+            _lastPage = Page;
+            await ReloadAsync();
+        }
+        await base.OnParametersSetAsync();
+    }
+
+    // Used to toggle the grid sort. Will either switch to "ascending" on a new column, or
+    // toggle beteween "ascending" and "descending" on a column with the sort already set.
+    // <parameter column is the ContactSortColumn to toggle
+    private Task ToggleAsync(ContactSortColumns column)
+    {
+        if (GridSort.SortColumn == column)
+        {
+            GridSort.SortAscending = !GridSort.SortAscending;
+        }
+        else
+        {
+            GridSort.SortColumn = column;
+        }
+        return ReloadAsync();
+    }
+
+    // Deletes a contact.
+    private async Task DeleteContactAsync()
+    {
+        // set loading to true so no one else messes with DB
+        using var context = DbFactory.CreateDbContext();
+        GridSort.Loading = true;
+
+        var contact = await context.Contacts.FirstAsync(c => c.Id == Wrapper.DeleteRequestId);
+
+        if (contact != null)
+        {
+            context.Contacts.Remove(contact);
+            await context.SaveChangesAsync();
+        }
+
+        // done working, now reload contacts and return
+        GridSort.Loading = false;
+        await ReloadAsync();
+    }
+
+    // Reload page based on sorting and paging controls.
+    private async Task ReloadAsync()
+    {
+        if (GridSort.Loading || Page < 1)
+        {
+            return;
+        }
+
+        // if grid isn't loading and page >= 1, then set loading to true
+        GridSort.Loading = true;
+
+        // initialize grid's delete contacts ID to empty guid
+        if (Wrapper != null)
+        {
+            Wrapper.DeleteRequestId = Guid.Empty;
+        }
+
+        // Create DB context to get contacts
+        Contacts = null;
+        using var context = DbFactory.CreateDbContext();
+
+        // run the query to load the current page
+        Contacts = await QueryAdapter.FetchAsync(context.Contacts.AsQueryable());
+
+        // now we're done after getting contacts
+        GridSort.Loading = false;
+    } 
+}

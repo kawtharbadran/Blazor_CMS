@@ -1,0 +1,20 @@
+﻿@inject IContactSort Sort
+
+@if (Column == Sort.SortColumn)
+{
+    @if (Sort.SortAscending)
+    {
+        <span class="oi oi-sort-ascending" aria-hidden="true"></span>
+    }
+    else
+    {
+        <span class="oi oi-sort-descending" aria-hidden="true"></span>
+    }
+    <span>&nbsp;</span>
+}
+@code
+{
+    // Sets which Contact Sort Columns this indicator is for.
+    [Parameter]
+    public ContactSortColumns Column { get; set; }
+}

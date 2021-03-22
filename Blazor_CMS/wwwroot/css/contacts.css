@@ -1,0 +1,27 @@
+﻿div.contacts-grid {
+    max-width: 80em;
+    float: left;
+    margin-bottom: 10%;
+}
+
+div.contact-header {
+    font-weight: bold;
+}
+
+    div.contact-header > div, div.contact-detail > div {
+        border: 1px solid #212529;
+        padding: 5px;
+    }
+
+    div.contact-header:hover {
+        cursor: pointer;
+    }
+
+div.row.contact-detail:hover > div {
+    background: #DCC1E9;
+}
+
+div.contact-header > div.col-2, div.contact-header > div.col-3 {
+    cursor: pointer;
+    background: #add8e6;
+}

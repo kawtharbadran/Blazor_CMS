@@ -1,0 +1,93 @@
+﻿@page "/add"
+
+@inject IDbContextFactory<ContactContext> DbFactory
+@inject NavigationManager Nav
+@inject IPageHelper PageHelper
+
+@if (Contact != null)
+{
+    <ContactForm Busy="@Busy"
+                Contact="@Contact"
+                IsAdd="true"
+                CancelRequest="Cancel"
+                ValidationResult="@(async (success) => await ValidationResultAsync(success))" />
+ }
+@if (Error)
+{
+    <br />
+    <div class="alert alert-danger">Failed to update the contact (@ErrorMessage).</div>
+ }
+
+@code
+{ 
+    // New Contact
+    private Contact Contact { get; set; }
+
+    // True when an asynchronous operation is running
+    private bool Busy;
+
+    // True after successful add
+    private bool Success;
+
+    // True when an error occurred
+    private bool Error;
+
+    // The error message
+    private string ErrorMessage = string.Empty;
+
+    /// Start with fresh Contact
+    protected override Task OnInitializedAsync()
+    {
+        Contact = new Contact();
+        return base.OnInitializedAsync();
+    }
+
+    // Respond to a forms submission.
+    // parameter success is True when valid
+    private async Task ValidationResultAsync(bool success)
+    {
+        if (Busy)
+        {
+            return;
+        }
+
+        if (!success)
+        {
+            Success = false;
+            Error = false;
+            return;
+        }
+
+        Busy = true;
+        using var context = DbFactory.CreateDbContext();
+
+        // this just attaches Contacts Context to DB context
+        context.Contacts.Add(Contact);
+
+        try
+        {
+            await context.SaveChangesAsync();
+            Success = true;
+            Error = false;
+
+            // ready for the next
+            Contact = new Contact();
+            Busy = false;
+            Nav.NavigateTo($"/{PageHelper.Page}");
+
+        }
+        catch (Exception ex)
+        {
+            Success = false;
+            Error = true;
+            ErrorMessage = ex.Message;
+            Busy = false;
+        }
+    }
+
+    // Back to list if the user clicks on cancel button
+    private void Cancel()
+    {
+        Nav.NavigateTo($"/{PageHelper.Page}");
+    }
+}

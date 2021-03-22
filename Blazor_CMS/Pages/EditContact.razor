@@ -1,0 +1,158 @@
+﻿@page "/edit/{ContactIdStr}"
+
+@implements IDisposable
+
+@inject IDbContextFactory<ContactContext> DbFactory
+@inject NavigationManager Nav
+@inject IPageHelper PageHelper
+@inject EditSuccess EditSuccessState
+
+@if (Contact == null && !Busy)
+{
+<p>Could not find contact with id @ContactIdStr.</p> }
+            else
+            {
+<ContactForm Busy="@Busy"
+             Contact="@Contact"
+             DbContact="@DbContact"
+             IsAdd="false"
+             CancelRequest="Cancel"
+             ValidationResult="@(async (success) => await ValidationResultAsync(success))" />
+}
+@if (ConcurrencyError)
+{
+<br />
+                <div class="alert alert-danger">
+                    <p>
+                        The contact details have changed since it was last loaded. The updated fields are highlighted in the form.
+                        Please choose an option:
+                    </p>
+                    <p><b>Cancel</b> to lose your changes and keep the database version.</p>
+                    <p><b>Submit</b> to force an update with your version.</p>
+                </div>}
+@if (Error)
+{
+    <br />
+    <div class="alert alert-danger">Failed to update the contact (@ErrorMessage).</div>
+    }
+
+@code
+{ /// Id of contact to edit
+    [Parameter]
+    public string ContactIdStr { get; set; }
+
+    // The ContactContext for database access
+    private ContactContext Context { get; set; }
+
+    // Contact being edited
+    private Contact Contact { get; set; }
+
+    // Database version when concurrency issues exist
+    private Contact DbContact { get; set; }
+
+    // Avoid concurrent requests
+    private bool Busy;
+
+    // An error occurred in the update
+    private bool Error;
+
+    // A concurrency error needs resolution
+    private bool ConcurrencyError;
+
+    // Error message
+    private string ErrorMessage = string.Empty;
+
+    // Start it up
+    protected override async Task OnInitializedAsync()
+    {
+        Busy = true;
+
+        try
+        {
+            Context = DbFactory.CreateDbContext();
+            Contact = await Context.Contacts
+                .SingleOrDefaultAsync(c => c.Id == Guid.Parse(ContactIdStr));
+        }
+        finally
+        {
+            Busy = false;
+        }
+
+        await base.OnInitializedAsync();
+    }
+
+    // Result of form validation
+    // parameter Success when model is valid
+    private async Task ValidationResultAsync(bool success)
+    {
+        if (Busy)
+        {
+            return;
+        }
+
+        if (!success)
+        {
+            // still need to edit model
+            Error = false;
+            ConcurrencyError = false;
+            return;
+        }
+
+        Busy = true; // async
+        try
+        {
+            await Context.SaveChangesAsync();
+            EditSuccessState.Success = true;
+            // go backt to index page to view the record
+            Nav.NavigateTo($"/{PageHelper.Page}");
+        }
+        catch (DbUpdateConcurrencyException dbex)
+        {
+            EditSuccessState.Success = false;
+
+            // concurrency issues!
+            ConcurrencyError = true;
+
+            // get values from database
+            var dbValues = dbex.Entries[0].GetDatabaseValues();
+
+            if (dbValues == null)
+            {
+                // deleted - show contact not found
+                Nav.NavigateTo($"/view/{Contact.Id}");
+                return;
+            }
+
+            // bind to show labels on form
+            DbContact = (Contact)dbValues.ToObject();
+
+            // move to original so second submit works (unless there is another concurrent edit)
+            dbex.Entries[0].OriginalValues.SetValues(dbValues);
+            Error = false;
+            Busy = false;
+        }
+        catch (Exception ex)
+        {
+            EditSuccessState.Success = false;
+            // unknown exception
+            Error = true;
+            ErrorMessage = ex.Message;
+            Busy = false;
+        }
+    }
+
+    // Bail out!
+    private void Cancel()
+    {
+        Busy = true;
+        Nav.NavigateTo($"/{PageHelper.Page}");
+    }
+
+    // Implement IDisposable
+    public void Dispose()
+    {
+        Context.Dispose();
+    }
+
+
+    }

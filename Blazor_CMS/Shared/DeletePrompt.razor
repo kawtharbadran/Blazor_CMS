@@ -1,0 +1,40 @@
+﻿@inject NavigationManager Nav
+@inject IPageHelper PageHelper
+
+<Modal @bind-Open="IsModalOpened" Close="OnClose">
+    <form method="dialog">
+        <p>
+            Are you sure you want to delete this contact ?
+        </p>
+        <menu>
+            <button class="btn btn-warning" value="cancel" @onclick="@(async () => await ConfirmAsync(false))">No</button>
+            <button class="btn btn-danger" value="confirm" @onclick="@(async () => await ConfirmAsync(true))">Yes</button>
+        </menu>
+    </form>
+</Modal>
+@code
+{ // Delegate confirmation to parent.
+    [Parameter]
+    public EventCallback<bool> Confirmation { get; set; }
+
+    // To test if delete button was clicked To open the confirmation modal
+    [Parameter]
+    public bool IsModalOpened { get; set; }
+
+    // Confirmation for delete, parameter confirmed is True when user confirms
+    private async Task ConfirmAsync(bool confirmed)
+    {
+        IsModalOpened = true;
+        await Confirmation.InvokeAsync(confirmed);
+    }
+    // Close the modal
+    void OnClose(string value)
+    {
+        // if user clicked yes, go back to the page on index/contacts grid
+        // if user clicks no, just close modal so user stays on edit page
+        if (value.Equals("confirm"))
+        {
+            Nav.NavigateTo($"/{PageHelper.Page}");
+        }
+
+    } }
